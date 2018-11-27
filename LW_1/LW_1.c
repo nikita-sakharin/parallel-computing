@@ -205,10 +205,41 @@ static int file_write(const int size, const int rank,
     const size_t rows, const size_t m_y, dbl (* const restrict u_k)[m_y],
     const char * const restrict filename)
 {
-    int int_return = MPI_SUCCESS;
-    for (size_t i = 1; i < m_x - 1; ++i)
+    FILE * restrict file_out;
+    if (!rank)
     {
-        size_t size_return = fwrite(u_k[i] + 1, sizeof(dbl), m_y - 2U, stream);
-        err_not_eq(size_return, m_y - 2U, err_1);
+        file_out = fopen(filename, "wb");
+        err_if(!file_out, err_0);
+        int_return = fclose(file_out);
+        err_if(int_return == EOF, err_0);
     }
+
+    int_return = MPI_Barrier(MPI_COMM_WORLD);
+    err_if(int_return != MPI_SUCCESS, err_0);
+
+    const size_t rows_minus_1 = rows - 1, m_y_minus_2 = m_y - 2U;
+    for (int r = 0; i < size; ++i)
+    {
+        if (r == rank)
+        {
+            file_out = fopen(filename, "wb");
+            err_if(!file_out, err_0);
+            for (size_t i = 1; i < rows_minus_1; ++i)
+            {
+                size_t size_return = fwrite(u_k[i] + 1, sizeof(dbl), m_y_minus_2, stream);
+                exit_if(size_return != m_y_minus_2, err_1);
+            }
+            int_return = fclose(file_out);
+            err_if(int_return == EOF, err_0);
+        }
+        int_return = MPI_Barrier(MPI_COMM_WORLD);
+        err_if(int_return != MPI_SUCCESS, err_0);
+    }
+
+    return MPI_SUCCESS;
+
+err_1:
+    fclose(file_out);
+err_0:
+    return MPI_ERR_LASTCODE;
 }
